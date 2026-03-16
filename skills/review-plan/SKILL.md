@@ -74,6 +74,6 @@ When the loop ends (either max iterations reached or no HIGH/MED feedback remain
 
 3. Show a summary:
    - Total iterations run
-   - Items auto-applied (HIGH + MED count)
-   - Items user-approved (LOW count applied)
-   - Items skipped (LOW count not applied)
+   - Items auto-applied (HIGH + MED count), each with a one-line description of what was changed and why
+   - Items user-approved (LOW count applied), each with a one-line description of what was changed and why
+   - Items skipped (LOW count not applied), each with a one-line description of what was skipped
