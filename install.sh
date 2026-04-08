@@ -3,17 +3,31 @@ set -euo pipefail
 
 # Install skills and agents from github.com/fernandoviton/skills
 # Usage: curl -fsSL https://raw.githubusercontent.com/fernandoviton/skills/main/install.sh | bash
-#   or:  bash install.sh [target-dir]
+#   or:  bash install.sh [-g] [target-dir]
+#   -g   Install globally to ~/.claude/skills (user-level, all projects)
 
 REPO_URL="https://github.com/fernandoviton/skills.git"
-TARGET="${1:-.}"
+GLOBAL=false
 
-# Resolve to absolute path
-TARGET="$(cd "$TARGET" && pwd)"
+while getopts "g" opt; do
+  case "$opt" in
+    g) GLOBAL=true ;;
+    *) echo "Usage: $0 [-g] [target-dir]"; exit 1 ;;
+  esac
+done
+shift $((OPTIND - 1))
 
-if [ ! -d "$TARGET/.claude" ]; then
-  echo "No .claude/ directory found in $TARGET — creating one."
-  mkdir -p "$TARGET/.claude"
+if [ "$GLOBAL" = true ]; then
+  TARGET="$HOME/.claude"
+else
+  TARGET="${1:-.}"
+  TARGET="$(cd "$TARGET" && pwd)"
+  TARGET="$TARGET/.claude"
+fi
+
+if [ ! -d "$TARGET" ]; then
+  echo "Creating $TARGET"
+  mkdir -p "$TARGET"
 fi
 
 # Clone to a temp dir
@@ -25,10 +39,10 @@ SRC="$TMPDIR/skills-repo"
 
 # Copy skills
 if [ -d "$SRC/skills" ]; then
-  mkdir -p "$TARGET/.claude/skills"
-  cp -r "$SRC/skills/"* "$TARGET/.claude/skills/"
+  mkdir -p "$TARGET/skills"
+  cp -r "$SRC/skills/"* "$TARGET/skills/"
   echo "Installed skills:"
-  find "$TARGET/.claude/skills" -name "SKILL.md" | while read -r f; do
+  find "$TARGET/skills" -name "SKILL.md" | while read -r f; do
     name=$(grep -m1 '^name:' "$f" | sed 's/name: *//')
     echo "  - $name"
   done
@@ -36,13 +50,13 @@ fi
 
 # Copy agents
 if [ -d "$SRC/agents" ]; then
-  mkdir -p "$TARGET/.claude/agents"
-  cp -r "$SRC/agents/"* "$TARGET/.claude/agents/"
+  mkdir -p "$TARGET/agents"
+  cp -r "$SRC/agents/"* "$TARGET/agents/"
   echo "Installed agents:"
-  for f in "$TARGET/.claude/agents/"*; do
+  for f in "$TARGET/agents/"*; do
     echo "  - $(basename "$f")"
   done
 fi
 
 echo ""
-echo "Done! Skills installed to $TARGET/.claude/"
+echo "Done! Skills installed to $TARGET/"

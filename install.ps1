@@ -1,63 +1,90 @@
-# Install skills and agents from github.com/fernandoviton/skills
-# Usage: irm https://raw.githubusercontent.com/fernandoviton/skills/main/install.ps1 | iex
-#   or:  .\install.ps1 [target-dir]
-
+#Requires -Version 5.1
+<#!
+.SYNOPSIS
+    Install skills and agents from github.com/fernandoviton/skills
+.PARAMETER Global
+    Install globally to ~/.claude/ (user-level, all projects)
+.PARAMETER Target
+    Target project directory (default: current directory)
+.EXAMPLE
+    .\install.ps1
+    .\install.ps1 -g
+    irm https://raw.githubusercontent.com/fernandoviton/skills/main/install.ps1 | iex
+#>
+[CmdletBinding()]
 param(
-    [string]$Target = "."
+    [Alias('g')]
+    [switch]$Global,
+
+    [Parameter(Position = 0)]
+    [string]$Target = '.'
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
 
-$RepoUrl = "https://github.com/fernandoviton/skills.git"
+$RepoUrl = 'https://github.com/fernandoviton/skills.git'
 
-# Resolve to absolute path
-$Target = (Resolve-Path $Target).Path
-
-$ClaudeDir = Join-Path $Target ".claude"
-
-if (-not (Test-Path $ClaudeDir)) {
-    Write-Host "No .claude/ directory found in $Target -- creating one."
-    New-Item -ItemType Directory -Path $ClaudeDir | Out-Null
+if ($Global) {
+    $DestDir = Join-Path $HOME '.claude'
+} else {
+    if (-not (Test-Path -LiteralPath $Target)) {
+        New-Item -ItemType Directory -Path $Target -Force | Out-Null
+    }
+    $DestDir = Join-Path (Resolve-Path -LiteralPath $Target).Path '.claude'
 }
 
-# Clone to a temp dir
-$TmpDir = Join-Path $env:TEMP ([System.IO.Path]::GetRandomFileName())
-New-Item -ItemType Directory -Path $TmpDir | Out-Null
+if (-not (Test-Path $DestDir)) {
+    Write-Host "Creating $DestDir"
+    New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
+}
+
+# Clone to a temporary directory.
+$TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("skills-install-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 
 try {
-    $SrcDir = Join-Path $TmpDir "skills-repo"
-    git clone --depth 1 --quiet $RepoUrl $SrcDir
+    git clone --depth 1 --quiet $RepoUrl $TmpDir
+    if ($LASTEXITCODE -ne 0) {
+        throw 'git clone failed'
+    }
 
     # Copy skills
-    $SrcSkills = Join-Path $SrcDir "skills"
-    if (Test-Path $SrcSkills) {
-        $SkillsDest = Join-Path $ClaudeDir "skills"
-        New-Item -ItemType Directory -Path $SkillsDest -Force | Out-Null
-        Copy-Item (Join-Path $SrcSkills "*") $SkillsDest -Recurse -Force
-        Write-Host "Installed skills:"
-        Get-ChildItem -Path $SkillsDest -Recurse -Filter "SKILL.md" | ForEach-Object {
+    $SkillsSrc = Join-Path $TmpDir 'skills'
+    if (Test-Path $SkillsSrc) {
+        $SkillsDest = Join-Path $DestDir 'skills'
+        if (-not (Test-Path $SkillsDest)) {
+            New-Item -ItemType Directory -Path $SkillsDest -Force | Out-Null
+        }
+
+        Copy-Item "$SkillsSrc\*" $SkillsDest -Recurse -Force
+        Write-Host 'Installed skills:'
+        Get-ChildItem $SkillsDest -Recurse -Filter 'SKILL.md' | ForEach-Object {
             $match = Select-String -Path $_.FullName -Pattern '^name:' | Select-Object -First 1
             if ($match) {
-                $nameLine = $match.Line -replace '^name:\s*', ''
-                Write-Host "  - $nameLine"
+                $name = $match.Line -replace '^name:\s*', ''
+                Write-Host "  - $name"
             }
         }
     }
 
     # Copy agents
-    $SrcAgents = Join-Path $SrcDir "agents"
-    if (Test-Path $SrcAgents) {
-        $AgentsDest = Join-Path $ClaudeDir "agents"
-        New-Item -ItemType Directory -Path $AgentsDest -Force | Out-Null
-        Copy-Item (Join-Path $SrcAgents "*") $AgentsDest -Recurse -Force
-        Write-Host "Installed agents:"
-        Get-ChildItem -Path $AgentsDest | ForEach-Object {
+    $AgentsSrc = Join-Path $TmpDir 'agents'
+    if (Test-Path $AgentsSrc) {
+        $AgentsDest = Join-Path $DestDir 'agents'
+        if (-not (Test-Path $AgentsDest)) {
+            New-Item -ItemType Directory -Path $AgentsDest -Force | Out-Null
+        }
+
+        Copy-Item "$AgentsSrc\*" $AgentsDest -Recurse -Force
+        Write-Host 'Installed agents:'
+        Get-ChildItem $AgentsDest -File | ForEach-Object {
             Write-Host "  - $($_.Name)"
         }
     }
-} finally {
-    Remove-Item -Recurse -Force $TmpDir
-}
 
-Write-Host ""
-Write-Host "Done! Skills installed to $ClaudeDir"
+    Write-Host ''
+    Write-Host "Done! Skills installed to $DestDir\"
+} finally {
+    if (Test-Path $TmpDir) {
+        Remove-Item $TmpDir -Recurse -Force
+    }
+}
